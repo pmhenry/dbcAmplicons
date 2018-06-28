@@ -31,7 +31,7 @@ class convertApp:
         self.verbose = verbose
         try:
             # read in barcode sequences
-            bcTable = barcodeTable(barcodesFile)
+            bcTable = barcodeTable(barcodesFile, i1_rc=False)
             if self.verbose:
                 sys.stdout.write("barcode table length: %s\n" % bcTable.getLength())
 
@@ -71,7 +71,7 @@ class convertApp:
             self.clean()
             sys.stderr.write("%s unexpectedly terminated\n" % (__name__))
             return 1
-        except:
+        except Exception:
             self.clean()
             sys.stderr.write("A fatal error was encountered.\n")
             if debug:
@@ -84,7 +84,7 @@ class convertApp:
         try:
             self.run.close()
             self.run_out.close()
-        except:
+        except Exception:
             pass
 
 

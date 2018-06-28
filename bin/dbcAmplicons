@@ -94,7 +94,7 @@ def preprocessParser(subparsers):
                                    action='store', type=str, dest='barcodes_file', metavar='FILENAME', required=True)
     preprocess_parser.add_argument('-d', '--barcodediff', help='max hamming dist from barcode [default: %(default)s]',
                                    type=int, dest='barcodediff', default=1)
-    preprocess_parser.add_argument('--I1', help='processing of Index 1 read, leave as is, or reverse complement [default: %(default)s]',
+    preprocess_parser.add_argument('--I1', help='processing of Index 1 read, leave as is, or reverse complement. [For four-read datasets, default: %(default)s. If --inline is specified, default: asis]',
                                    action='store', type=str, dest='I1_orientation', metavar='asis/rc', choices=['asis', 'rc'], default='rc')
     preprocess_parser.add_argument('--I2', help='processing of Index 2 read, leave as is (asis), or reverse complement (rc) [default: %(default)s]',
                                    action='store', type=str, dest='I2_orientation', metavar='asis/rc', choices=['asis', 'rc'], default='asis')
@@ -104,6 +104,8 @@ def preprocessParser(subparsers):
                                    type=int, dest='primerdiff', default=4)
     preprocess_parser.add_argument('-e', '--primerend', help='required number of matching bases at end of primer [default: %(default)s]',
                                    type=int, dest='primerend', default=4)
+    preprocess_parser.add_argument('--flip', help='Primers can be seen in both orientiations, tests flip and reorients all reads to the same orientation.',
+                                   action='store_true', dest="flip", default=False)
     preprocess_parser.add_argument('-f', '--dedup_float', help='number of bases preceeding primer used to deduplicate reads [default: %(default)s]',
                                    type=int, dest='dedup_float', default=0)
     preprocess_parser.add_argument('-S', '--sample_metadata', help='file with sample metadata',
@@ -122,13 +124,13 @@ def preprocessParser(subparsers):
                                    action='store_true', dest='uncompressed', default=False)
     preprocess_parser.add_argument('-v', '--silent', help='silences verbose output [default: %(default)s]',
                                    action='store_true', dest='verbose', default=False)
-    preprocess_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq four file set',
+    preprocess_parser.add_argument('-1', '--R1', metavar="read1", dest='fastq_file1', help='read (read 1) of an amplicon fastq[.gz] four file set',
                                    action='store', type=str, required=True, nargs='+')
-    preprocess_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq four file set',
+    preprocess_parser.add_argument('-2', '--BC1', metavar="read2", dest='fastq_file2', help='read (barcode 1) of an amplicon fastq[.gz] four file set',
                                    action='store', type=str, required=False, nargs='+')
-    preprocess_parser.add_argument('-3', metavar="read3", dest='fastq_file3', help='read3 of an amplicon fastq four file set',
+    preprocess_parser.add_argument('-3', '--BC2', metavar="read3", dest='fastq_file3', help='read (barcode 2) of an amplicon fastq[.gz] four file set',
                                    action='store', type=str, required=False, nargs='+')
-    preprocess_parser.add_argument('-4', metavar="read4", dest='fastq_file4', help='read4 of an amplicon fastq four file set',
+    preprocess_parser.add_argument('-4', '--R2', metavar="read4", dest='fastq_file4', help='read (read 2) of an amplicon fastq[.gz] four file set',
                                    action='store', type=str, required=False, nargs='+')
     preprocess_parser.add_argument('--test', help='exit after the first batch in order to test the inputs',
                                    action='store_true', dest="test", default=False)
@@ -137,14 +139,13 @@ def preprocessParser(subparsers):
     preprocess_parser.add_argument('--debug', help='show traceback on error',
                                    action='store_true', dest="debug", default=False)
     #SIK added from preprocPair_with_inlineBC
-    inlineBC.add_argument('-i', '--inline', help='indicates barcodes are inline, not separate indices. Only R1 and barcode file are required.',
-                                   action='store', dest='inline', default=False)
+    inlineBC.add_argument('-i', '--inline', help='Indicates barcode sequences are at the beginning of template reads, not separate index read files. Use this option if your PCR primers contained 5 prime attached barcode sequences. Only R1 and barcode file are required.',
+                                   action='store_true', dest='inline', default=False)
+
     inlineBC.add_argument('-b1', '--inline_barcode1', help='Inline barcode 1 length [default: %(default)s], will become Read 2',
                                    type=int, dest='barcode1', default=8)
     inlineBC.add_argument('-b2', '--inline_barcode2', help='Inline barcode 2 length [default: %(default)s], will become Read 3',
                                    type=int, dest='barcode2', default=0)
-    #preprocess_parser.add_argument('-fl', '--dedup_float', help='barcode can be on R1 or R2 (reverse) [default: %(default)s]',
-    #                               action='store', dest='dedup_float', default=False)
     return preprocess_parser
 
 
@@ -190,14 +191,6 @@ class preprocessCMD:
             args.I1_orientation = 'asis'
 
         # ----------------------- barcodes orientation ------------------------
-        if args.I1_orientation == 'asis':
-            I1rc = False
-        else:
-            I1rc = True
-        if args.I2_orientation == 'asis':
-            I2rc = False
-        else:
-            I2rc = True
 
         from dbcAmplicons import misc
         misc.make_sure_path_exists(os.path.dirname(output_prefix))
@@ -205,11 +198,24 @@ class preprocessCMD:
         app = preprocessApp()
 
         #If --inline is true, run preprocPair_with_inlineBC() first.
-        if args.inline:
-          if profile:
-            import cProfile
-            cProfile.runctx('app.preprocPair_with_inlineBC(args.fastq_file1, args.fastq_file2, args.output_prefix, args.barcode1, args.barcode2, args.barcodesFile, args.max_diff, args.dedup_float, args.batchsize, args.uncompressed, args.verbose, args.debug)', globals(), locals())
-            cProfile.runctx('app.start(args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)', globals(), locals())
+        #Execute normally, beginning with start()
+
+        if profile:
+          import cProfile
+          if args.inline:
+            I1rc = False
+            I2rc = False
+            args.flip = True
+            inlinefastq_file1, inlinefastq_file2, inlinefastq_file3, inlinefastq_file4 = app.preprocPair_with_inlineBC(args.fastq_file1, args.fastq_file2, args.barcode1, args.barcode2, bcFile, args.barcodediff, args.flip, output_prefix, args.batchsize, args.uncompressed, verbose, args.debug)
+            args.fastq_file1 = [inlinefastq_file1]
+            args.fastq_file2 = [inlinefastq_file2]
+            args.fastq_file3 = [inlinefastq_file3]
+            args.fastq_file4 = [inlinefastq_file4]
+            args.flip = False
+            cProfile.runctx('app.start(args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.flip, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)', globals(), locals())
+            return 255
+          else:
+            cProfile.runctx('app.start(args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.flip, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)', globals(), locals())
             return 255
           else:
             inlinefastq_file1, inlinefastq_file2, inlinefastq_file3, inlinefastq_file4 = app.preprocPair_with_inlineBC(args.fastq_file1, args.fastq_file2, args.barcode1, args.barcode2, bcFile, args.barcodediff, args.dedup_float, output_prefix, args.batchsize, args.uncompressed, verbose, args.debug)
@@ -220,12 +226,28 @@ class preprocessCMD:
             return app.start (list1, list2, list3, list4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)
         #Execute normally, beginning with start()
         else:
-          if profile:
-            import cProfile
-            cProfile.runctx('app.start(args.fastq_file1, args.fastq_file2, fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)', globals(), locals())
-            return 255
+          if args.inline:
+            I1rc = False
+            I2rc = False
+            args.flip = True
+            inlinefastq_file1, inlinefastq_file2, inlinefastq_file3, inlinefastq_file4 = app.preprocPair_with_inlineBC(args.fastq_file1, args.fastq_file2, args.barcode1, args.barcode2, bcFile, args.barcodediff, args.flip, output_prefix, args.batchsize, args.uncompressed, verbose, args.debug)
+            args.fastq_file1 = [inlinefastq_file1]
+            args.fastq_file2 = [inlinefastq_file2]
+            args.fastq_file3 = [inlinefastq_file3]
+            args.fastq_file4 = [inlinefastq_file4]
+            args.flip = False
+            return app.start (args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.flip, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)
           else:
-            return app.start(args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)
+            if args.I1_orientation == 'asis':
+              I1rc = False
+            else:
+              I1rc = True
+            if args.I2_orientation == 'asis':
+              I2rc = False
+            else:
+              I2rc = True
+            return app.start(args.fastq_file1, args.fastq_file2, args.fastq_file3, args.fastq_file4, output_prefix, bcFile, prFile, sFile, args.barcodediff, I1rc, I2rc, args.dedup_float, args.primerdiff, args.primerend, args.flip, args.batchsize, args.uncompressed, args.unidentified, args.minQ, args.minL, verbose, args.debug, args.kprimer, args.test)
+
 
         
 #####################################################################################
@@ -250,9 +272,9 @@ def splitreadsParser(subparsers):
                                    action='store_true', dest='verbose', default=False)
     splitreads_parser.add_argument('-S', '--sample_metadata', help='file with sample metadata',
                                    action='store', type=str, dest='samples_file', metavar='FILENAME', default=None, required=True)
-    splitreads_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq two file set',
+    splitreads_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq[.gz] two file set',
                                    action='store', type=str, required=True, nargs='+')
-    splitreads_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq two file set',
+    splitreads_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq[.gz] two file set',
                                    action='store', type=str, required=False, nargs='+')
     splitreads_parser.add_argument('--debug', help='show traceback on error',
                                    action='store_true', dest="debug", default=False)
@@ -326,9 +348,9 @@ def joinParser(subparsers):
                              type=int, dest='threads', default=1)
     join_parser.add_argument('-v', '--verbose', help='verbose output [default: %(default)s]',
                              action='store_true', dest='verbose', default=True)
-    join_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq (or fastq.gz) two file set',
+    join_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq[.gz] two file set',
                              action='store', type=str, required=True)
-    join_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq (or fastq.gz)  two file set',
+    join_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq[.gz] two file set',
                              action='store', type=str, required=False)
     return join_parser
 
@@ -404,11 +426,11 @@ def screeningParser(subparsers):
                                   action='store_true', dest='strict', default=False)
     screening_parser.add_argument('-O', '--output_path', help='path (and prefix) for output files [default: %(default)s]',
                                   action='store', type=str, dest='output_base', metavar='outputPrefix', default='screening')
-    screening_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq two file set',
+    screening_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq[.gz] two file set',
                                   action='store', type=str, default=None, required=False, nargs='+')
-    screening_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq two file set',
+    screening_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq[.gz] two file set',
                                   action='store', type=str, default=None, required=False, nargs='+')
-    screening_parser.add_argument('-U', metavar="single", dest='fastq_file3', help='single-end amplicon, typically from joined paired reads',
+    screening_parser.add_argument('-U', metavar="single", dest='fastq_file3', help='single-end amplicon fastq[.gz], typically from joined paired reads',
                                   action='store', type=str, default=None, required=False, nargs='+')
     screening_parser.add_argument('-v', '--silent', help='silences verbose output [default: %(default)s]',
                                   action='store_true', dest='verbose', default=False)
@@ -479,7 +501,7 @@ def classifyParser(subparsers):
                                  type=int, dest='batchsize', default=100000)
     classify_parser.add_argument('-q', '--minQ', help="trim 3' end of sequences to minQ (paired-end reads only) [default: %(default)s]",
                                  type=int, dest='minQ', default=0),
-    classify_parser.add_argument('-l', '--minL', help='if minQ is not None, only keep reads that are at least minL length (paired-end reads only) [default: %(default)s]',
+    classify_parser.add_argument('-l', '--minL', help='Only keep reads that are at least minL length (paired-end or joined reads) [default: %(default)s]',
                                  type=int, dest='minL', default=0),
     classify_parser.add_argument('-p', '--processors', help='number of processors to use, [default: %(default)s]',
                                  type=int, dest='procs', default=1)
@@ -491,11 +513,11 @@ def classifyParser(subparsers):
                                  action='store', dest="train", default=None)
     classify_parser.add_argument('-O', '--output_path', help='path for output files [default: %(default)s]',
                                  action='store', type=str, dest='output_base', metavar='outputPrefix', default='classify')
-    classify_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq two file set',
+    classify_parser.add_argument('-1', metavar="read1", dest='fastq_file1', help='read1 of an amplicon fastq[.gz] two file set',
                                  action='store', type=str, default=None, required=False, nargs='+')
-    classify_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq two file set',
+    classify_parser.add_argument('-2', metavar="read2", dest='fastq_file2', help='read2 of an amplicon fastq[.gz] two file set',
                                  action='store', type=str, default=None, required=False, nargs='+')
-    classify_parser.add_argument('-U', metavar="single", dest='fastq_file3', help='single-end amplicon, typically from joined paired reads',
+    classify_parser.add_argument('-U', metavar="single", dest='fastq_file3', help='single-end amplicon fastq[.gz], typically from joined paired reads',
                                  action='store', type=str, default=None, required=False, nargs='+')
     classify_parser.add_argument('--test', help='exit after the first batch in order to test the inputs',
                                  action='store_true', dest="test", default=False)
@@ -636,6 +658,7 @@ class abundanceCMD:
         else:
             return app.start(args.fixrank_file, sFile, output_prefix, args.rank, args.threshold, args.minsize, args.maxsize, args.biom, args.hdf5, verbose, debug)
 
+
 #####################################################################################
 # Extract reads corresponding to specific taxa
 def extractParser(subparsers):
@@ -686,7 +709,6 @@ def parseArgs():
     classifyParser(subparsers)
     abundanceParser(subparsers)
     extractParser(subparsers)
-
     args = parser.parse_args()
 
     return args
