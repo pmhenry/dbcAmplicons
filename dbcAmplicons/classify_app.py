@@ -158,7 +158,13 @@ class classifyApp:
             with open(output_prefix + ".fixrank", "wb") as outfile:
                 for f in results.keys():
                     with open(f, "rb") as infile:
-                        outfile.write(infile.read())
+                        ### SIK edit (the folowing 4 lines conserve fixrank:fastq line order)
+                        for line in infile.readlines():
+                            if line[0:7] == '[FAIL]-':
+                                outfile.write('[FAIL]:minQ_or_minL_not_met\t'+line.split()[0].split('[FAIL]-')[1]+'\n')
+                            else:
+                                outfile.write(line)
+                        ###
                     os.remove(f)
                     
             if self.verbose:
