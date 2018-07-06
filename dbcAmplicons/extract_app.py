@@ -1,6 +1,8 @@
 #extract_app
 
 import sys, os, time, gzip
+import time
+start_time = time.time()
 from dbcAmplicons import OneReadIlluminaRun
 
 def fFileLength(file):
@@ -10,21 +12,33 @@ def fFileLength(file):
 			pass
 		return i + 1
 
-def fFileWrite(vFileName,vToWrite):
+def fRemoveFiles(vFastqLoops, vFixrankLoops, batch):
+	i=0
+	while i<=vFastqLoops:
+		os.remove('extFastqTemp_'+str(batch)+"_"+str(i))
+		i+=1
+	i=0
+	while i<=vFixrankLoops:
+		os.remove('extFixrankTemp_'+str(batch)+"_"+str(i))
+		i+=1
+
+def fFileWrite(vFileName,vToWrite, vSolution=False, vBatchNumber="", overwrite=False):
 	#Writes vDict to vFileName file.
-	if os.path.isfile(vFileName):
-		open(vFileName,'w')
-	vTempFile = open(vFileName,'a')
-	try:
-		#Test if dictionary
-		if vToWrite.keys() == True:
-			for i in vToWrite:
-				for j in vToWrite[i]:
-					vTempFile.write(j)
-	except:
-		#if fails, assume its a list
+	if os.path.isfile(vFileName+"_"+vBatchNumber) ==False: #checks to see if file exists and if it should be overwriten or appended
+		vTempFile=open(vFileName+"_"+vBatchNumber,'w')
+	elif overwrite==True:
+		vTempFile=open(vFileName+"_"+vBatchNumber,'w')
+	else:
+		vTempFile=open(vFileName+"_"+vBatchNumber,'a')
+	if vSolution==True:			#writes a file containing a multiple array 
+		for i in range(len(vToWrite)):
+			for y in range(4):
+				vTempFile.write(vToWrite[i][y])
+		vTempFile.close()
+	else:
 		for i in vToWrite:
 			vTempFile.write(i)	
+		vTempFile.close()
 
 class extractApp():
 
@@ -32,6 +46,7 @@ class extractApp():
 		self.verbose = False
 
 	def start(self, taxon, fixrank, fastq, threshold, output, batchsize):
+		starttime = time.time()
 
 		#Format input files:
 		print("---\nTaxon target is: " + taxon)
@@ -42,111 +57,142 @@ class extractApp():
 			vFastqFile = open(fastq, "r")
 
 		#Run through the batches
-		block = False
-		if block == False:
 
-			vFixBatchList = []
-			vBatch,n = 0,0
-			with vFixrankFile as file:
-				for classification in file.read().split('\n'):
-
-					if n < batchsize:
-						vFixBatchList.append(classification+'\n')
-						n+=1
-					
-					if n == batchsize:
-						fFileWrite('extFixrankTemp_'+str(vBatch), vFixBatchList)
-						vBatch+=1
+		print "Begining to break fixed rank into batches"
+		vFixBatchList = []
+		vBatch_fixrank,n = 0,0
+		loops_fixrank=0
+		continue_loop=True
+		while continue_loop==True: #breaks the fix rank file into a number of temporary files with lengths equal to the batch size
+			with vFixrankFile as file: 
+				for classification in file.read().split('\n'):	#writes a file containing as many lines of the fix rank file as the batch demands
+					if n < batchsize and classification !="":
+						if classification!="":
+							vFixBatchList.append(classification+'\n')
+						n+=1						
+					if n == batchsize: #If a batch size is reached, the batch will be written to file, the batch will be cleared, 
+										#and the counter for the number of loops for the fixed rank will increase
+						fFileWrite('extFixrankTemp_'+str(batchsize), vFixBatchList, False, str(loops_fixrank), True)
 						vFixBatchList = []
-						n = 0
+						loops_fixrank+=1
+						n=0
+						print "Fix rank batch #"+str(loops_fixrank)+" written"
+				
+				if len(vFixBatchList) >0:					
+					vBatch_fixrank =n
+					fFileWrite('extFixrankTemp_'+str(batchsize), vFixBatchList, False, str(loops_fixrank), True)
+					vFixBatchList=[] #clear batch to save memory
+					print "Fix rank batch #"+str(loops_fixrank+1)+" written"
+					continue_loop=False
+				else:
+					continue_loop=False
 
-				if n != batchsize:
-					if len(vFixBatchList) != 0:
-						fFileWrite('extFixrankTemp_'+str(vBatch), vFixBatchList)
-						vBatch +=1
+
+		file.close()
+						
+
 
 		#Generate fastq batches
-		block = True
-		if block == False:
 
-			n = 0
-			k = 0
-			j = 0
-			vBatch = 0
-			vList = []
-			vDict = {}
-			with vFastqFile as file:
+		n = 0
+		k = 0
+		j = 0
+		print "Begining to break Fastq into batches"
+		vList = []
+		vTotal=[]
+		continue_loop=True
+		i=0
+		vBatch_fastq=0
+		loops_fastq=0
+		while continue_loop ==True: #breaks the fastq file into a number of temporary files with lengths equal to the batch size
+			with vFastqFile as file:     
 				for line in file.readlines():
 					if n < batchsize:
-						vList.append(line)
+						if line!="":
+							vList.append(line)
 						k+=1
-						if k % 4 == 0:
-							vDict[j] = vList
+						if k % 4 == 0 and k!=0:  ## stores each of the four lines of the sample into one array 
+							vTotal.append(vList)
 							vList = []
 							j+=1
 							n+=1
-					if n == batchsize:
-						fFileWrite('extFastqTemp_'+str(vBatch), vDict)
-						print(str(vBatch) + ' complete.')
+					if n == batchsize:	#If a batch size is reached, the batch will be written to file, the batch will be cleared, 
+										#and the counter for the number of loops for the fastq rank will increase
+						fFileWrite('extFastqTemp_'+str(batchsize), vTotal, True, str(loops_fastq), True)
 						n = 0
 						j = 0
-						vBatch +=1
 						vList = []
-						vDict = {}
-				if len(vDict) != 0:
-					fFileWrite('extFastqTemp_'+str(vBatch), vDict)
-
-		#Compares file lengths
-		block = True
-		if block == False:
-
-			for batch in range(vBatch):
-				with open('extFixrankTemp__'+str(batch),"r") as file:
-					vFixrankLength = (len(file.readlines()))
-					file.close()
-				with open('extFastqTemp_'+str(vBatch),"r") as file:
-					vFastqLength = (len(file.readlines())/4)
-					file.close()
-				if vFixrankLength == vFastqLength:
-					print(str(batch)+' '+str(vFixrankLength)+':'+str(vFastqLength)+' Files align. Proceeding with extraction.')
+						vTotal = []
+						loops_fastq+=1
+						print "Fastq batch #"+str(loops_fastq)+" written"
+				if len(vTotal)>0: #if the file ends before the batch limit is reached, will recorded
+					fFileWrite('extFastqTemp_'+str(batchsize), vTotal, True, str(loops_fastq), True)
+					vList = []
+					vTotal = []
+					vBatch_fastq=n
+					print "Fastq batch #"+str(loops_fastq+1)+" written"
+					continue_loop=False
 				else:
-					print(str(batch)+' '+str(vFixrankLength)+':'+str(vFastqLength)+' [ERROR]: Files do not align.')
-		
+					vList = []
+					vTotal = []
+					continue_loop=False
+		file.close()
 		# Extract
 		vList = []
-		vFilePlace = 0
-		vCounter = 0
-		for batch in range(vBatch):
-			print('Batch '+str(batch)+' begun')
-			with open('extFixrankTemp_'+str(batch)) as vFile:
-			 	for line in vFile.readlines():
-			 		vFastqPlace = (vFilePlace*4)
-	 	 			if line.isspace() == True:
-	 	 				continue
-	 	 			elif line[0:6] == '[FAIL]':
-	 	 				vFilePlace +=1
-	 	 			else:
-	 	 				if line.split()[22] == taxon:
-	 	 					if float(line.split("\t",26)[25]) >= float(threshold):
-	 	 						#Extract Read from fastq
-	 	 						loop = True
-	 	 						with open(fastq, "r") as file:
-	 	 							for i, read in enumerate(file):
-	 	 								if vCounter > 0:
-	 	 									vList.append(read)
-	 	 									vCounter -= 1
-	 	 									loop = False
+		vFilePlace = 0		
+		vCounter = loops_fixrank
+		
+		print "Finding valid samples"
+		vGoodReads=[]
+		while vCounter>=0: #Loops through all of the split fix rank files and records all good reads
+			with open('extFixrankTemp_'+str(batchsize)+"_"+str(vCounter)) as vFile:
+				for line in vFile.readlines():
+		 	 		if taxon in line and float(line.split("\t",26)[25]) >= float(threshold): #checks threshold and if the sample is above or at the score
+		 	 				vGoodReads.append(line.split("|",1)[0]) 		   #it will add the sample to the good reads file	
+		 		vCounter-=1
+		 	vFile.close()
+		
+		vFile.close()
+		vContinue=False					
+		vCounter=loops_fastq
+		first_variable=""
+		check_first_varable=True
 
-	 	 								if loop == True:
-		 	 								if i == vFastqPlace:
-		 	 									if read.split()[0].split('|')[0] == ('@'+line.split()[0].split('|')[0]):
-		 	 										vList.append(read)
-		 	 										vCounter = 3
-	 	 							vFilePlace+=1
+		print str(len(vGoodReads))+" valid samples found"
+		print "Extracting the samples. This may take a while"
 
-	 	 			 	else:
-			 		 		vFilePlace+=1
-			if len(vList) > 0:
-				fFileWrite('extOut_'+str(batch),vList)
-				vList = []
-			print('Batch '+str(batch)+' complete')
+		while vCounter>=0:	#Loops through all of the fastq files and writes all of the good reads
+		 	x=0
+		 	with open('extFastqTemp_'+str(batchsize)+"_"+str(vCounter), "r") as file:
+		 	 	print vCounter
+		 	 	for i, read in enumerate(file): #loops over the file. Increases i each step
+
+		 	 	######## @M may not be a good variable as it may change with speceis. save first two characters of line 1 and sort by that?
+					if check_first_varable==True: #this should fix problem above, but only if header names are relatively consistant throughout
+		 	 			first_variable=read[:1]
+		 	 			check_first_varable=False
+
+		 	 		if first_variable in read:  #While '@' is used as a quality score, '@M' has so far only been found in header
+		 	 			if read.split(" ",1)[0][1:] in vGoodReads: #checks to see if the header is in the good reads
+		 	 				vContinue=True
+							vGoodReads.remove(read.split(" ",1)[0][1:]) #if header is in good reads, it will be removed from good reads to save memory
+
+		 	 		if vContinue==True: #If this is turned on, the next four lines (which is the length of the sample), will be recorded
+		 	 			vList.append(read)
+		 	 			x+=1
+			 			if x ==4:
+							x=0
+							vContinue=False
+
+					if len(vGoodReads)==0 and vContinue==False:
+						break
+			file.close()
+			fFileWrite('extOut_'+taxon+"_"+str(batchsize),vList)
+			vList=[]
+			vCounter-=1
+		print "Samples extracted"
+		print "Cleaning up"
+		fRemoveFiles(loops_fastq, loops_fixrank, batchsize)
+		print "Done"
+		print("--- %s seconds ---" % (time.time() - start_time))
+
