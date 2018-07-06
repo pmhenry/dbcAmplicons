@@ -108,8 +108,8 @@ class classifyApp:
                     for read in reads:
                         if minQ != 0 or minL != 0:
                             read.trimRead(minQ, minL)
-                            if read.goodRead == True:
-                                run_out.addRead(read.getFasta())
+                            #if read.goodRead == True:
+                            run_out.addRead(read.getFasta(),read.goodRead)
                         else:
                             run_out.addRead(read.getJoinedFasta())
                     # Write out reads
@@ -158,7 +158,7 @@ class classifyApp:
             with open(output_prefix + ".fixrank", "wb") as outfile:
                 for f in results.keys():
                     with open(f, "rb") as infile:
-                        ### SIK edit (the folowing 4 lines conserve fixrank:fastq line order)
+                        ### SIK edit (conserve fixrank:fastq line order)
                         for line in infile.readlines():
                             if line[0:7] == '[FAIL]-':
                                 outfile.write('[FAIL]:minQ_or_minL_not_met\t'+line.split()[0].split('[FAIL]-')[1]+'\n')
