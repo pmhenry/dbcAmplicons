@@ -164,7 +164,6 @@ class extractApp():
 		while vCounter>=0:	#Loops through all of the fastq files and writes all of the good reads
 		 	x=0
 		 	with open('extFastqTemp_'+str(batchsize)+"_"+str(vCounter), "r") as file:
-		 	 	print vCounter
 		 	 	for i, read in enumerate(file): #loops over the file. Increases i each step
 
 		 	 	######## @M may not be a good variable as it may change with speceis. save first two characters of line 1 and sort by that?
