@@ -377,7 +377,7 @@ class TwoSequenceReadSet:
         # Barcode One Matching
         if bc1_length > 0:
             bc1, bc1Mismatch = barcodeDist(bcTable.getI1(), self.read_1[:bc1_length], max_diff)
-            if dedup_float:
+            if flip:
                 bc1f, bc1fMismatch = barcodeDist(bcTable.getI1(), self.read_2[:bc1_length], max_diff)
                 if bc1fMismatch < bc1Mismatch:  # flip produces a better match reverse the reads
                     vflip = True
@@ -397,7 +397,7 @@ class TwoSequenceReadSet:
         # Barcode Two Matching (when no barcode 1 present)
         elif bc2_length > 0:
             bc2, bc2Mismatch = barcodeDist(bcTable.getI2(), self.read_2[:bc2_length], max_diff)
-            if dedup_float:
+            if flip:
                 bc2f, bc2fMismatch = barcodeDist(bcTable.getI2(), self.read_1[:bc2_length], max_diff)
                 if bc2fMismatch < bc2Mismatch:  # flip produces a better match rever the reads
                     vflip = True
@@ -451,7 +451,28 @@ class TwoSequenceReadSet:
             read1_name = "%s|%s:PAIR" % (name, self.sample)
         r1 = '\n'.join([read1_name, joined_seq])
         return [r1]
-
+    def getJoinedFasta(self, fail=False):
+        """
+        Create two line string ('\n' separator included) for the read pair, concatenating the two reads into a single returning length 1 vector (one read)
+        """
+        if fail==False:
+            name = '>' + self.name[1:]
+            joined_seq = self.read_1[0:self.trim_left] + misc.reverseComplement(self.read_2[0:self.trim_right])
+            if self.primer is not None:
+                read1_name = "%s|%s:%s:PAIR" % (name, self.sample, self.primer)
+            else:
+                read1_name = "%s|%s:PAIR" % (name, self.sample)
+            r1 = '\n'.join([read1_name, joined_seq])
+            return [r1]
+        else:
+            name = '>FAIL' + self.name[1:]
+            joined_seq = self.read_1[0:self.trim_left] + misc.reverseComplement(self.read_2[0:self.trim_right])
+            if self.primer is not None:
+                read1_name = "%s|%s:%s:PAIR" % (name, self.sample, self.primer)
+            else:
+                read1_name = "%s|%s:PAIR" % (name, self.sample)
+            r1 = '\n'.join([read1_name, joined_seq])
+            return [r1]
 
 # ---------------- Class for 2 read sequence data processed with dbcAmplicons preprocess ----------------
 class OneSequenceReadSet:
@@ -500,17 +521,26 @@ class OneSequenceReadSet:
         r1 = '\n'.join([read1_name, self.read_1, '+', self.qual_1])
         return [r1]
 
-    def getFasta(self):
+    def getFasta(self, fail=False):
         """
         Create two line string ('\n' separator included) for the read, returning a length 1 vector (one read)
         """
-        name = '>' + self.name[1:]
-        if self.primer is not None:
-            read1_name = "%s|%s:%s:%i" % (name, self.sample, self.primer, len(self.read_1))
+        if fail == True:
+            name = '>[FAIL:minQ_or_minL_not_met]' + self.name[1:]
+            if self.primer is not None:
+                read1_name = "%s|%s:%s:%i" % (name, self.sample, self.primer, len(self.read_1))
+            else:
+                read1_name = "%s|%s:%i" % (name, self.sample, len(self.read_1))
+            r1 = '\n'.join([read1_name, self.read_1])
+            return [r1]
         else:
-            read1_name = "%s|%s:%i" % (name, self.sample, len(self.read_1))
-        r1 = '\n'.join([read1_name, self.read_1])
-        return [r1]
+            name = '>' + self.name[1:]
+            if self.primer is not None:
+                read1_name = "%s|%s:%s:%i" % (name, self.sample, self.primer, len(self.read_1))
+            else:
+                read1_name = "%s|%s:%i" % (name, self.sample, len(self.read_1))
+            r1 = '\n'.join([read1_name, self.read_1])
+            return [r1]
 
     def trimRead(self, minQ, minL):
         """
