@@ -108,10 +108,12 @@ class classifyApp:
                     for read in reads:
                         if minQ != 0 or minL != 0:
                             read.trimRead(minQ, minL)
-                            #if read.goodRead == True:
-                            run_out.addRead(read.getFasta(),read.goodRead)
+                            if read.goodRead == True:
+                                run_out.addRead(read.getFasta())
+                            else:
+                                run_out.addRead(read.getFasta(fail=True))
                         else:
-                            run_out.addRead(read.getJoinedFasta())
+                            run_out.addRead(read.getFasta())
                     # Write out reads
                     rcount = run_out.count()
                     if rcount > batchsize:
@@ -123,7 +125,7 @@ class classifyApp:
                         break
 
             #For TwoReadIllumina:
-            if (self.runPairs is not None):
+            else:
                 while 1:
                     # get next batch of reads
                     reads = self.runPairs.next(batchsize)
@@ -137,6 +139,8 @@ class classifyApp:
                             read.trimRead(minQ, minL)
                             if read.goodRead == True:
                                 run_out.addRead(read.getJoinedFasta())
+                            else:
+                                run_out.addRead(read.getJoinedFasta(fail=True))
                         else:
                             run_out.addRead(read.getJoinedFasta())
                     # Write out reads
@@ -158,13 +162,8 @@ class classifyApp:
             with open(output_prefix + ".fixrank", "wb") as outfile:
                 for f in results.keys():
                     with open(f, "rb") as infile:
-                        ### SIK edit (conserve fixrank:fastq line order)
                         for line in infile.readlines():
-                            if line[0:7] == '[FAIL]-':
-                                outfile.write('[FAIL]:minQ_or_minL_not_met\t'+line.split()[0].split('[FAIL]-')[1]+'\n')
-                            else:
-                                outfile.write(line)
-                        ###
+                            outfile.write(line)
                     os.remove(f)
                     
             if self.verbose:
