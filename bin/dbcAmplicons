@@ -664,13 +664,19 @@ class abundanceCMD:
 # Extract reads corresponding to specific taxa
 def extractParser(subparsers):
   extract_parser = subparsers.add_parser('extract', help='extract reads corresponding to soecific taxa')
-  extract_parser.add_argument('-s', '--taxon_string', help='taxon string, e.g. Fusarium_solani_3', dest='taxon', type=str)
+  extract_parser.add_argument('-s', '--species_string', help='species string, e.g. Fusarium_solani_3', dest='species', type=str)
   extract_parser.add_argument('-F', '--fixrank_file', help='fixrank file ', dest='fixrank', type=str)
   extract_parser.add_argument('-q', '--fastq_file', help='fastq file with all sequences to search', dest='fastq', type=str)
   extract_parser.add_argument('-t', '--threshold', help='Threshold bootstrap scrore', dest='threshold', type=str)
   extract_parser.add_argument('-o', '--output_path', help='Output prefix', dest='output', type=str)
   extract_parser.add_argument('-b', '--batchsize', help='batch size to process reads in [default: %(default)s]',
                                    type=int, dest='batchsize', default=100000)
+  extract_parser.add_argument('-l', '--order_string', help='order string, not required e.g. Ascomycota', dest='order', type=str)
+  extract_parser.add_argument('-f', '--family_string', help='family string, not required e.g. Nectriaceae', dest='family', type=str)
+  extract_parser.add_argument('-g', '--genus_string', help='genus string, not required e.g. Fusarium', dest='genus', type=str)
+  extract_parser.add_argument('-p', '--processors', help='number of processors to use, [default: %(default)s]',
+                                 type=int, dest='procs', default=1)
+
   return extract_parser
 
 class extractCMD:
@@ -687,7 +693,7 @@ class extractCMD:
       cProfile.runctx('app.start(args.taxon, args.fixrank, args.fastq, args.threshold, args.output)', globals(), locals())
       return 255
     else:
-      return app.start(args.taxon, args.fixrank, args.fastq, args.threshold, args.output, args.batchsize)
+      return app.start(args.species, args.fixrank, args.fastq, args.threshold, args.output, args.batchsize)
 
 
 #####################################################################################
